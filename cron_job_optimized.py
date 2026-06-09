@@ -1,31 +1,63 @@
 #!/usr/bin/env python3
-# cron_job_optimized.py - Versione ottimizzata
+# cron_job_optimized.py - Genera cookie e salva in JSON
 
 import asyncio
 import os
 import random
 import gc
+import json
 from datetime import datetime
 from supabase import create_client
 from browser_use_sdk import AsyncBrowserUse
 from playwright.async_api import async_playwright
 
-# ==================== CONFIGURAZIONE OTTIMIZZATA ====================
-KEYS_SUPABASE_URL = os.environ.get("KEYS_SUPABASE_URL", "https://kdqzfsmibquvvobjvjlj.supabase.co")
-KEYS_SUPABASE_KEY = os.environ.get("KEYS_SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
-
-COOKIE_SUPABASE_URL = os.environ.get("COOKIE_SUPABASE_URL", "https://ofijopixtpwahgbwyutc.supabase.co")
-COOKIE_SUPABASE_KEY = os.environ.get("COOKIE_SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
+# ==================== CONFIGURAZIONE ====================
+KEYS_SUPABASE_URL = "https://kdqzfsmibquvvobjvjlj.supabase.co"
+KEYS_SUPABASE_KEY = "sb_publishable_bx4TPawDf5e3u07ko5YJcQ_dFkYfSQ-"
 
 DEFAULT_PASSWORD = "DDnmVV45!!"
+MAX_ATTEMPTS = 7
+PAUSE_BETWEEN_ACCOUNTS = 15
+TIMEOUT = 90000
 
-# PARAMETRI OTTIMIZZATI
-MAX_ATTEMPTS = 7              # +2 tentativi
-PAUSE_BETWEEN_ACCOUNTS = 15   # -5 secondi
-TIMEOUT = 90000               # 90 secondi
-TURNSTILE_WAIT = 30000        # 30 secondi per Turnstile
-
-from config import ACCOUNTS
+# Account EasyHits4U
+ACCOUNTS = [
+    {'email': 'sandrominori50+ulugarecexisa@gmail.com', 'name': 'ulugarecexisa'},
+    {'email': 'sandrominori50+ukageluli@gmail.com', 'name': 'ukageluli'},
+    {'email': 'sandrominori50+ukaxiloki@gmail.com', 'name': 'ukaxiloki'},
+    {'email': 'sandrominori50+uchikilaremu@gmail.com', 'name': 'uchikilaremu'},
+    {'email': 'sandrominori50+ufrrmncrachinora@gmail.com', 'name': 'ufrrmncrachinora'},
+    {'email': 'sandrominori50+unenomasagebebe@gmail.com', 'name': 'unenomasagebebe'},
+    {'email': 'sandrominori50+uisnrnafwttvvceer@gmail.com', 'name': 'uisnrnafwttvvceer'},
+    {'email': 'sandrominori50+ujuenpaorgl@gmail.com', 'name': 'ujuenpaorgl'},
+    {'email': 'sandrominori50+uvuoobe@gmail.com', 'name': 'uvuoobe'},
+    {'email': 'sandrominori50+uoovoge@gmail.com', 'name': 'uoovoge'},
+    {'email': 'sandrominori50+ukafifoko@gmail.com', 'name': 'ukafifoko'},
+    {'email': 'sandrominori50+ubozogaza@gmail.com', 'name': 'ubozogaza'},
+    {'email': 'sandrominori50+udapasa@gmail.com', 'name': 'udapasa'},
+    {'email': 'sandrominori50+uluglqupgbe@gmail.com', 'name': 'uluglqupgbe'},
+    {'email': 'sandrominori50+unaglbene@gmail.com', 'name': 'unaglbene'},
+    {'email': 'sandrominori50+umachizo@gmail.com', 'name': 'umachizo'},
+    {'email': 'sandrominori50+ulaaacummgl@gmail.com', 'name': 'ulaaacummgl'},
+    {'email': 'sandrominori50+ufrrageboki@gmail.com', 'name': 'ufrrageboki'},
+    {'email': 'sandrominori50+unomama@gmail.com', 'name': 'unomama'},
+    {'email': 'sandrominori50+ucuquaacuge@gmail.com', 'name': 'ucuquaacuge'},
+    {'email': 'sandrominori50+ukufeno@gmail.com', 'name': 'ukufeno'},
+    {'email': 'sandrominori50+ukitulobbqu@gmail.com', 'name': 'ukitulobbqu'},
+    {'email': 'sandrominori50+udaglkilerm@gmail.com', 'name': 'udaglkilerm'},
+    {'email': 'sandrominori50+usaadgapa@gmail.com', 'name': 'usaadgapa'},
+    {'email': 'sandrominori50+uqumopgne@gmail.com', 'name': 'uqumopgne'},
+    {'email': 'sandrominori50+upgximamazo@gmail.com', 'name': 'upgximamazo'},
+    {'email': 'sandrominori50+uboooggnale@gmail.com', 'name': 'uboooggnale'},
+    {'email': 'sandrominori50+uenqufetr@gmail.com', 'name': 'uenqufetr'},
+    {'email': 'sandrominori50+umumure@gmail.com', 'name': 'umumure'},
+    {'email': 'sandrominori50+udabbpgnc@gmail.com', 'name': 'udabbpgnc'},
+    {'email': 'sandrominori50+uquliufnemu@gmail.com', 'name': 'uquliufnemu'},
+    {'email': 'sandrominori50+ukikreazala@gmail.com', 'name': 'ukikreazala'},
+    {'email': 'sandrominori50+ulibbra@gmail.com', 'name': 'ulibbra'},
+    {'email': 'sandrominori50+uzarawalita@gmail.com', 'name': 'uzarawalita'},
+    {'email': 'sandrominori50+ufitamina@gmail.com', 'name': 'ufitamina'},
+]
 
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -33,10 +65,7 @@ def log(msg):
 def get_all_working_keys():
     try:
         supabase = create_client(KEYS_SUPABASE_URL, KEYS_SUPABASE_KEY)
-        resp = supabase.table('browser_use_keys')\
-            .select('api_key')\
-            .eq('status', 'working')\
-            .execute()
+        resp = supabase.table('browser_use_keys').select('api_key').eq('status', 'working').execute()
         if not resp.data:
             return []
         return [row['api_key'] for row in resp.data]
@@ -53,39 +82,6 @@ def get_random_working_key(exclude_keys=None):
         if not keys:
             return None
     return random.choice(keys)
-
-def update_key_status(api_key, status):
-    try:
-        supabase = create_client(KEYS_SUPABASE_URL, KEYS_SUPABASE_KEY)
-        supabase.table('browser_use_keys')\
-            .update({'status': status, 'last_used': datetime.now().isoformat()})\
-            .eq('api_key', api_key)\
-            .execute()
-        log(f"   📝 Chiave {api_key[:20]}... -> {status}")
-    except Exception as e:
-        log(f"   ❌ Errore aggiornamento status: {e}")
-
-def save_cookie_to_db(email, nome_utente, cookie_string, sesids, user_id):
-    try:
-        supabase = create_client(COOKIE_SUPABASE_URL, COOKIE_SUPABASE_KEY)
-        divella_format = f"{nome_utente}|{cookie_string}"
-        data = {
-            'email': email,
-            'nome_utente': nome_utente,
-            'divella_format': divella_format,
-            'cookie_string': cookie_string,
-            'sesids': sesids,
-            'user_id': user_id,
-            'account_name': nome_utente,
-            'status': 'active',
-            'updated_at': datetime.now().isoformat()
-        }
-        supabase.table('account_cookies').upsert(data, on_conflict='email').execute()
-        log(f"   💾 Salvato su Supabase")
-        return True
-    except Exception as e:
-        log(f"   ❌ Errore salvataggio: {e}")
-        return False
 
 async def generate_cookie_for_account(api_key, account):
     email = account['email']
@@ -108,10 +104,9 @@ async def generate_cookie_for_account(api_key, account):
             await page.goto("https://www.easyhits4u.com/logon/", timeout=TIMEOUT)
             await page.wait_for_timeout(5000)
             
-            # ATTESA PER TURNSTILE
+            # Attesa Turnstile
             try:
-                await page.wait_for_selector('input[name="cf-turnstile-response"]', timeout=TURNSTILE_WAIT)
-                log(f"   🔐 Turnstile rilevato, attesa completamento...")
+                await page.wait_for_selector('input[name="cf-turnstile-response"]', timeout=30000)
                 await page.wait_for_timeout(3000)
             except:
                 log(f"   ⚠️ Turnstile non rilevato, procedo...")
@@ -128,32 +123,29 @@ async def generate_cookie_for_account(api_key, account):
             user_id = next((c['value'] for c in cookies if c['name'] == 'user_id'), None)
             
             if sesids and user_id:
+                divella_format = f"{nome}|{cookie_string}"
                 log(f"   ✅ OK - sesids={sesids}")
-                save_cookie_to_db(email, nome, cookie_string, sesids, user_id)
-                return True
+                return True, divella_format, cookie_string, sesids, user_id
             else:
                 log(f"   ❌ Cookie non trovati")
-                return False
+                return False, None, None, None, None
             
     except Exception as e:
         error_msg = str(e)
         if "429" in error_msg:
             log(f"   ⚠️ RATE LIMIT (429)")
-            update_key_status(api_key, 'rate_limited')
-            return "rate_limit"
+            return "rate_limit", None, None, None, None
         else:
             log(f"   ❌ Errore: {error_msg[:80]}")
-            return False
+            return False, None, None, None, None
     finally:
         if profile:
             try:
                 await client.profiles.delete(profile.id)
-                log(f"   🗑️ Profilo eliminato")
             except:
                 pass
         try:
             await client.close()
-            log(f"   🔒 Client chiuso")
         except:
             pass
         await asyncio.sleep(2)
@@ -161,11 +153,7 @@ async def generate_cookie_for_account(api_key, account):
 
 async def main():
     log("=" * 60)
-    log("CRON JOB OTTIMIZZATO - CAMBIO CHIAVE SU 429")
-    log(f"Account totali: {len(ACCOUNTS)}")
-    log(f"Tentativi massimi: {MAX_ATTEMPTS}")
-    log(f"Timeout: {TIMEOUT//1000}s")
-    log(f"Pausa tra account: {PAUSE_BETWEEN_ACCOUNTS}s")
+    log("CRON JOB OTTIMIZZATO - GENERAZIONE COOKIE")
     log("=" * 60)
     
     all_keys = get_all_working_keys()
@@ -173,46 +161,64 @@ async def main():
         log("❌ Nessuna chiave working")
         return
     
-    log(f"🔑 Chiavi working disponibili: {len(all_keys)}")
+    log(f"🔑 Chiavi working: {len(all_keys)}")
     
     successi = 0
     falliti = 0
+    cookies_list = []  # Lista per salvare i cookie per Divella
     
     for i, account in enumerate(ACCOUNTS):
         log(f"\n📌 [{i+1}/{len(ACCOUNTS)}] {account['name']}")
         
         used_keys = []
+        success = False
         
         for attempt in range(MAX_ATTEMPTS):
             api_key = get_random_working_key(exclude_keys=used_keys)
             if not api_key:
-                log(f"   ❌ Nessuna chiave disponibile")
                 break
             
-            result = await generate_cookie_for_account(api_key, account)
+            result, divella_format, cookie_string, sesids, user_id = await generate_cookie_for_account(api_key, account)
             
             if result == True:
+                success = True
                 successi += 1
+                # Salva cookie per Divella
+                cookies_list.append({
+                    'name': account['name'],
+                    'email': account['email'],
+                    'divella_format': divella_format,
+                    'sesids': sesids,
+                    'user_id': user_id
+                })
                 break
             elif result == "rate_limit":
                 used_keys.append(api_key)
-                log(f"   🔄 Tentativo {attempt+1}/{MAX_ATTEMPTS} - cambio chiave...")
                 continue
             else:
                 falliti += 1
                 break
         
+        if not success:
+            falliti += 1
+        
         if i < len(ACCOUNTS) - 1:
-            log(f"   ⏳ Pausa {PAUSE_BETWEEN_ACCOUNTS} secondi...")
             await asyncio.sleep(PAUSE_BETWEEN_ACCOUNTS)
+    
+    # Salva i cookie in file JSON per Divella
+    try:
+        with open("active_cookies.json", "w") as f:
+            json.dump(cookies_list, f, indent=2)
+        log(f"\n💾 active_cookies.json salvato con {len(cookies_list)} cookie")
+    except Exception as e:
+        log(f"⚠️ Errore salvataggio file: {e}")
     
     log("\n" + "=" * 60)
     log("📊 RIEPILOGO FINALE")
     log("=" * 60)
     log(f"✅ Successi: {successi}")
     log(f"❌ Falliti: {falliti}")
-    log(f"📊 Totale account: {len(ACCOUNTS)}")
-    log(f"🎯 Percentuale successo: {successi/len(ACCOUNTS)*100:.1f}%")
+    log(f"📊 Totale: {len(ACCOUNTS)}")
     log("=" * 60)
 
 if __name__ == "__main__":
