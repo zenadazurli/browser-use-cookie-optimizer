@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# cron_job_optimized.py - Genera cookie e salva su Supabase
+# cron_job_optimized.py - Genera cookie e salva su Supabase (con retry falliti)
 
 import asyncio
 import os
@@ -99,6 +99,7 @@ def save_cookie_to_db(email, nome_utente, cookie_string, sesids, user_id):
         data = {
             'email': email,
             'nome_utente': nome_utente,
+            'account_name': nome_utente,
             'divella_format': divella_format,
             'cookie_string': cookie_string,
             'sesids': sesids,
@@ -182,7 +183,7 @@ async def generate_cookie_for_account(api_key, account):
 
 async def main():
     log("=" * 60)
-    log("CRON JOB OTTIMIZZATO - GENERAZIONE COOKIE")
+    log("CRON JOB OTTIMIZZATO - GENERAZIONE COOKIE (con retry falliti)")
     log("=" * 60)
     
     if not KEYS_SUPABASE_KEY:
@@ -198,7 +199,9 @@ async def main():
     
     successi = 0
     falliti = 0
+    falliti_list = []  # Lista degli account falliti
     
+    # ===== PRIMO CICLO =====
     for i, account in enumerate(ACCOUNTS):
         log(f"\n📌 [{i+1}/{len(ACCOUNTS)}] {account['name']}")
         
@@ -222,20 +225,66 @@ async def main():
                 continue
             else:
                 falliti += 1
+                falliti_list.append(account)
                 break
         
         if not success:
             falliti += 1
+            falliti_list.append(account)
         
         if i < len(ACCOUNTS) - 1:
             await asyncio.sleep(PAUSE_BETWEEN_ACCOUNTS)
     
+    # ===== SECONDO CICLO: RITENTA SOLO I FALLITI =====
+    if falliti_list:
+        log("\n" + "=" * 60)
+        log(f"🔄 RITENTO {len(falliti_list)} ACCOUNT FALLITI")
+        log("=" * 60)
+        
+        ritentati = 0
+        recuperati = 0
+        
+        for i, account in enumerate(falliti_list):
+            log(f"\n📌 RITENTO [{i+1}/{len(falliti_list)}] {account['name']}")
+            
+            used_keys = []
+            success = False
+            
+            for attempt in range(MAX_ATTEMPTS):
+                api_key = get_random_working_key(exclude_keys=used_keys)
+                if not api_key:
+                    break
+                
+                result = await generate_cookie_for_account(api_key, account)
+                
+                if result == True:
+                    success = True
+                    recuperati += 1
+                    successi += 1
+                    falliti -= 1
+                    break
+                elif result == "rate_limit":
+                    used_keys.append(api_key)
+                    log(f"   🔄 Tentativo {attempt+1}/{MAX_ATTEMPTS} - cambio chiave...")
+                    continue
+                else:
+                    break
+            
+            ritentati += 1
+            
+            if i < len(falliti_list) - 1:
+                await asyncio.sleep(PAUSE_BETWEEN_ACCOUNTS)
+        
+        log(f"\n📊 Recuperati nel secondo ciclo: {recuperati}/{ritentati}")
+    
+    # ===== RIEPILOGO FINALE =====
     log("\n" + "=" * 60)
     log("📊 RIEPILOGO FINALE")
     log("=" * 60)
-    log(f"✅ Successi: {successi}")
-    log(f"❌ Falliti: {falliti}")
-    log(f"📊 Totale: {len(ACCOUNTS)}")
+    log(f"✅ Successi totali: {successi}")
+    log(f"❌ Falliti totali: {falliti}")
+    log(f"📊 Totale account: {len(ACCOUNTS)}")
+    log(f"🎯 Percentuale successo: {successi/len(ACCOUNTS)*100:.1f}%")
     log("=" * 60)
 
 if __name__ == "__main__":
