@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# cron_job_optimized.py - Genera cookie e salva su file JSON
+# cron_job_optimized.py - Genera cookie con doppio ciclo di ritentativi
 
 import asyncio
 import os
@@ -12,7 +12,6 @@ from browser_use_sdk import AsyncBrowserUse
 from playwright.async_api import async_playwright
 
 # ==================== CONFIGURAZIONE ====================
-# Variabili d'ambiente (da impostare su Render)
 KEYS_SUPABASE_URL = os.environ.get("KEYS_SUPABASE_URL", "https://kdqzfsmibquvvobjvjlj.supabase.co")
 KEYS_SUPABASE_KEY = os.environ.get("KEYS_SUPABASE_KEY")
 
@@ -156,12 +155,11 @@ async def generate_cookie_for_account(api_key, account):
 
 async def main():
     log("=" * 60)
-    log("CRON JOB OTTIMIZZATO - GENERAZIONE COOKIE")
+    log("CRON JOB OTTIMIZZATO - GENERAZIONE COOKIE (con retry falliti)")
     log("=" * 60)
     
     if not KEYS_SUPABASE_KEY:
         log("❌ Variabile KEYS_SUPABASE_KEY non impostata")
-        log("   Imposta la variabile d'ambiente su Render")
         return
     
     all_keys = get_all_working_keys()
@@ -173,8 +171,10 @@ async def main():
     
     successi = 0
     falliti = 0
+    falliti_list = []
     cookies_list = []
     
+    # ===== PRIMO CICLO =====
     for i, account in enumerate(ACCOUNTS):
         log(f"\n📌 [{i+1}/{len(ACCOUNTS)}] {account['name']}")
         
@@ -203,20 +203,64 @@ async def main():
                 continue
             else:
                 falliti += 1
+                falliti_list.append(account)
                 break
         
         if not success:
             falliti += 1
+            falliti_list.append(account)
         
         if i < len(ACCOUNTS) - 1:
             await asyncio.sleep(PAUSE_BETWEEN_ACCOUNTS)
     
+    # ===== SECONDO CICLO: RITENTA SOLO I FALLITI =====
+    if falliti_list:
+        log("\n" + "=" * 60)
+        log(f"🔄 RITENTO {len(falliti_list)} ACCOUNT FALLITI")
+        log("=" * 60)
+        
+        recuperati = 0
+        
+        for i, account in enumerate(falliti_list):
+            log(f"\n📌 RITENTO [{i+1}/{len(falliti_list)}] {account['name']}")
+            
+            used_keys = []
+            success = False
+            
+            for attempt in range(MAX_ATTEMPTS):
+                api_key = get_random_working_key(exclude_keys=used_keys)
+                if not api_key:
+                    break
+                
+                result, divella_format = await generate_cookie_for_account(api_key, account)
+                
+                if result == True:
+                    success = True
+                    recuperati += 1
+                    successi += 1
+                    falliti -= 1
+                    cookies_list.append({
+                        'name': account['name'],
+                        'email': account['email'],
+                        'cookie_string': divella_format
+                    })
+                    break
+                elif result == "rate_limit":
+                    used_keys.append(api_key)
+                    log(f"   🔄 Tentativo {attempt+1}/{MAX_ATTEMPTS} - cambio chiave...")
+                    continue
+                else:
+                    break
+            
+            if i < len(falliti_list) - 1:
+                await asyncio.sleep(PAUSE_BETWEEN_ACCOUNTS)
+        
+        log(f"\n📊 Recuperati nel secondo ciclo: {recuperati}/{len(falliti_list)}")
+    
     # ===== SALVA I COOKIE SU FILE JSON PER IL COLLECTOR =====
     try:
-        # Crea la directory condivisa
         os.makedirs("/data", exist_ok=True)
         
-        # Prepara i cookie nel formato che il collector si aspetta
         active_cookies = []
         for cookie in cookies_list:
             active_cookies.append({
@@ -225,7 +269,6 @@ async def main():
                 'cookie_string': cookie['cookie_string']
             })
         
-        # Salva su file
         with open("/data/active_cookies.json", "w") as f:
             json.dump(active_cookies, f, indent=2)
         
@@ -238,8 +281,8 @@ async def main():
     log("\n" + "=" * 60)
     log("📊 RIEPILOGO FINALE")
     log("=" * 60)
-    log(f"✅ Successi: {successi}")
-    log(f"❌ Falliti: {falliti}")
+    log(f"✅ Successi totali: {successi}")
+    log(f"❌ Falliti totali: {falliti}")
     log(f"📊 Totale account: {len(ACCOUNTS)}")
     log("=" * 60)
 
