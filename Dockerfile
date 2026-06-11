@@ -10,6 +10,5 @@ RUN playwright install-deps
 
 WORKDIR /app
 COPY cron_job_optimized.py .
-COPY config.py .
 
 CMD ["python", "-u", "cron_job_optimized.py"]
