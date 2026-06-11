@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
-# cron_job_optimized.py - Genera cookie con doppio ciclo di ritentativi
+# cron_job_optimized.py - Genera cookie e salva su Supabase
 
 import asyncio
 import os
 import random
 import gc
-import json
 from datetime import datetime
 from supabase import create_client
 from browser_use_sdk import AsyncBrowserUse
 from playwright.async_api import async_playwright
 
 # ==================== CONFIGURAZIONE ====================
+# Database per le chiavi Browser Use
 KEYS_SUPABASE_URL = os.environ.get("KEYS_SUPABASE_URL", "https://kdqzfsmibquvvobjvjlj.supabase.co")
 KEYS_SUPABASE_KEY = os.environ.get("KEYS_SUPABASE_KEY")
+
+# Database per i cookie
+COOKIE_SUPABASE_URL = os.environ.get("COOKIE_SUPABASE_URL", "https://ofijopixtpwahgbwyutc.supabase.co")
+COOKIE_SUPABASE_KEY = os.environ.get("COOKIE_SUPABASE_KEY")
 
 DEFAULT_PASSWORD = "DDnmVV45!!"
 MAX_ATTEMPTS = 7
 PAUSE_BETWEEN_ACCOUNTS = 15
 TIMEOUT = 90000
 
-# Account EasyHits4U (35 account)
+# Account EasyHits4U
 ACCOUNTS = [
     {'email': 'sandrominori50+ulugarecexisa@gmail.com', 'name': 'ulugarecexisa'},
     {'email': 'sandrominori50+ukageluli@gmail.com', 'name': 'ukageluli'},
@@ -86,6 +90,31 @@ def get_random_working_key(exclude_keys=None):
             return None
     return random.choice(keys)
 
+def save_cookie_to_db(email, nome_utente, cookie_string, sesids, user_id):
+    if not COOKIE_SUPABASE_KEY:
+        log("❌ COOKIE_SUPABASE_KEY non impostata")
+        return False
+    try:
+        supabase = create_client(COOKIE_SUPABASE_URL, COOKIE_SUPABASE_KEY)
+        divella_format = f"{nome_utente}|{cookie_string}"
+        data = {
+            'email': email,
+            'nome_utente': nome_utente,
+            'account_name': nome_utente,
+            'divella_format': divella_format,
+            'cookie_string': cookie_string,
+            'sesids': sesids,
+            'user_id': user_id,
+            'status': 'active',
+            'updated_at': datetime.now().isoformat()
+        }
+        supabase.table('account_cookies').upsert(data, on_conflict='email').execute()
+        log(f"   💾 Salvato su Supabase")
+        return True
+    except Exception as e:
+        log(f"   ❌ Errore salvataggio: {e}")
+        return False
+
 async def generate_cookie_for_account(api_key, account):
     email = account['email']
     nome = account['name']
@@ -125,21 +154,21 @@ async def generate_cookie_for_account(api_key, account):
             user_id = next((c['value'] for c in cookies if c['name'] == 'user_id'), None)
             
             if sesids and user_id:
-                divella_format = f"{nome}|{cookie_string}"
                 log(f"   ✅ OK - sesids={sesids}")
-                return True, divella_format
+                save_cookie_to_db(email, nome, cookie_string, sesids, user_id)
+                return True
             else:
                 log(f"   ❌ Cookie non trovati")
-                return False, None
+                return False
             
     except Exception as e:
         error_msg = str(e)
         if "429" in error_msg:
             log(f"   ⚠️ RATE LIMIT (429)")
-            return "rate_limit", None
+            return "rate_limit"
         else:
             log(f"   ❌ Errore: {error_msg[:80]}")
-            return False, None
+            return False
     finally:
         if profile:
             try:
@@ -155,7 +184,7 @@ async def generate_cookie_for_account(api_key, account):
 
 async def main():
     log("=" * 60)
-    log("CRON JOB OTTIMIZZATO - GENERAZIONE COOKIE (con retry falliti)")
+    log("CRON JOB OTTIMIZZATO - GENERAZIONE COOKIE")
     log("=" * 60)
     
     if not KEYS_SUPABASE_KEY:
@@ -172,7 +201,6 @@ async def main():
     successi = 0
     falliti = 0
     falliti_list = []
-    cookies_list = []
     
     # ===== PRIMO CICLO =====
     for i, account in enumerate(ACCOUNTS):
@@ -186,16 +214,11 @@ async def main():
             if not api_key:
                 break
             
-            result, divella_format = await generate_cookie_for_account(api_key, account)
+            result = await generate_cookie_for_account(api_key, account)
             
             if result == True:
                 success = True
                 successi += 1
-                cookies_list.append({
-                    'name': account['name'],
-                    'email': account['email'],
-                    'cookie_string': divella_format
-                })
                 break
             elif result == "rate_limit":
                 used_keys.append(api_key)
@@ -232,18 +255,13 @@ async def main():
                 if not api_key:
                     break
                 
-                result, divella_format = await generate_cookie_for_account(api_key, account)
+                result = await generate_cookie_for_account(api_key, account)
                 
                 if result == True:
                     success = True
                     recuperati += 1
                     successi += 1
                     falliti -= 1
-                    cookies_list.append({
-                        'name': account['name'],
-                        'email': account['email'],
-                        'cookie_string': divella_format
-                    })
                     break
                 elif result == "rate_limit":
                     used_keys.append(api_key)
@@ -256,26 +274,6 @@ async def main():
                 await asyncio.sleep(PAUSE_BETWEEN_ACCOUNTS)
         
         log(f"\n📊 Recuperati nel secondo ciclo: {recuperati}/{len(falliti_list)}")
-    
-    # ===== SALVA I COOKIE SU FILE JSON PER IL COLLECTOR =====
-    try:
-        os.makedirs("/data", exist_ok=True)
-        
-        active_cookies = []
-        for cookie in cookies_list:
-            active_cookies.append({
-                'name': cookie['name'],
-                'email': cookie['email'],
-                'cookie_string': cookie['cookie_string']
-            })
-        
-        with open("/data/active_cookies.json", "w") as f:
-            json.dump(active_cookies, f, indent=2)
-        
-        log(f"\n💾 active_cookies.json salvato con {len(active_cookies)} cookie")
-        log(f"   Percorso: /data/active_cookies.json")
-    except Exception as e:
-        log(f"⚠️ Errore salvataggio file JSON: {e}")
     
     # ===== RIEPILOGO FINALE =====
     log("\n" + "=" * 60)
